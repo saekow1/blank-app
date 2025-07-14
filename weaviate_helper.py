@@ -1,13 +1,11 @@
 # Connects to Weaviate and uploads resume data
 
-#-----------------------------------------------------------
-
-
-##from weaviate.connect import ConnectionParams
 import weaviate
 from weaviate.classes.init import Auth
+from weaviate.classes.config import Property, DataType, Configure
 from dotenv import load_dotenv
 import os
+import uuid
 
 # Load credentials from .env
 load_dotenv()
@@ -15,50 +13,56 @@ print("✅ Loaded:", os.environ.get("WEAVIATE_URL"))
 
 def connect_to_weaviate():
     client = weaviate.connect_to_weaviate_cloud(
-    cluster_url=os.environ.get("WEAVIATE_URL"),
-    auth_credentials=Auth.api_key(os.environ.get("WEAVIATE_API_KEY")),
-    headers={"X-OpenAI-Api-Key": os.environ.get("OPENAI_API_KEY")}
+        cluster_url=os.environ.get("WEAVIATE_URL"),
+        auth_credentials=Auth.api_key(os.environ.get("WEAVIATE_API_KEY")),
+        headers={"X-OpenAI-Api-Key": os.environ.get("OPENAI_API_KEY")}
     )
 
-    print(client.is_ready())  #should print: `True`
+    if client.is_ready():
+        print("✅ Connected to Weaviate!")
+    else:
+        print("❌ Failed to connect to Weaviate!")
 
-    client.close()  #Free up resources
+    return client
 
-
-#def upload_to_weaviate(client, data):
-    #get the "Resume" collection and insert the resume data
-    #resume_collection = client.collections.get("Resume")
-    #resume_collection.data.insert(data_object=data)
-
+def ensure_collection_exists(client):
+    collection_name = "resume_profiles"
+    if not client.collections.exists(collection_name):
+        print("⚠️ Creating collection 'resume_profiles'")
+        client.collections.create(
+            name=collection_name,
+            vectorizer_config=Configure.Vectorizer.text2vec_openai(),
+            properties=[
+                Property(name="name", data_type=DataType.TEXT),
+                Property(name="email", data_type=DataType.TEXT),
+                Property(name="phone", data_type=DataType.TEXT),
+                Property(name="linkedin", data_type=DataType.TEXT),
+                Property(name="skills", data_type=DataType.TEXT),
+                Property(name="education", data_type=DataType.TEXT),
+                Property(name="certifications", data_type=DataType.TEXT),
+                Property(name="experience", data_type=DataType.TEXT),
+                Property(name="projects", data_type=DataType.TEXT),
+            ]
+        )
 
 def upload_to_weaviate(client, parsed_data):
-    import openai
-    import uuid
-    import os
+    ensure_collection_exists(client)
 
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-
-    # Create a single string for embedding
-    combined_text = "\n".join([f"{k}: {v}" for k, v in parsed_data.items()])
-
-  
-    # Match your collection schema
     data = {
         "name": parsed_data["Name"],
         "email": parsed_data["Email"],
         "phone": parsed_data["Phone"],
-        "skills": parsed_data["Skills"], #.split(", "),  # If comma-separated
-        "education": parsed_data["Education"],
-        "experience": parsed_data["Experience"],
+        "linkedin": parsed_data["LinkedIn"],
+        "skills": ", ".join(parsed_data.get("Skills", [])),
+        "education": "\n".join(parsed_data.get("Education", [])),
+        "certifications": "\n".join(parsed_data.get("Certifications", [])),
+        "experience": "\n".join(parsed_data.get("Experience", [])),
+        "projects": "\n".join(parsed_data.get("Projects", [])),
     }
 
-    #client.collections.get("Resume").data.insert(data_object=data)
-    
-    # Upload into your collection
-    client.collections.get("MyFirstCollection").data.insert(
-        uuid = uuid.uuid4(),
-        properties = data,
-        vector = vector
+    client.collections.get("resume_profiles").data.insert(
+        uuid=uuid.uuid4(),
+        properties=data
     )
 
-
+    print("✅ Uploaded resume to Weaviate")
